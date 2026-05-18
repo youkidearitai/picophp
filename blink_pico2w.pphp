@@ -1,0 +1,7 @@
+<?php
+while (true) {
+    led_write(HIGH);
+    sleep_ms(500);
+    led_write(LOW);
+    sleep_ms(500);
+}

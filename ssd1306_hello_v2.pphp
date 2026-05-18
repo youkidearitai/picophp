@@ -1,0 +1,201 @@
+<?php
+// ssd1306_hello_v2.pphp
+//
+// SSD1306 128x64 I2C demo for PicoPHP.
+// Shows "Hello World" near the center.
+//
+// Required native functions:
+//   i2c_init(bus, sda, scl, baud)
+//   i2c_write(bus, addr, binary_string)
+//   sleep_ms(ms)
+//   chr(n)
+//
+// Wiring:
+//   VCC -> 3V3
+//   GND -> GND
+//   SDA -> GP4
+//   SCL -> GP5
+//
+// Address:
+//   0x3C = 60 is common.
+//   If nothing appears, try 61.
+
+const I2C_BUS = 0;
+const I2C_SDA = 4;
+const I2C_SCL = 5;
+const I2C_BAUD = 100000;
+
+const SSD1306_ADDR = 60; // 0x3C. Try 61 for 0x3D.
+
+const CTRL_CMD = 0;      // 0x00
+const CTRL_DATA = 64;    // 0x40
+
+function ssd1306_cmd($cmds) {
+    i2c_write(I2C_BUS, SSD1306_ADDR, chr(CTRL_CMD) . $cmds);
+}
+
+function ssd1306_data($data) {
+    i2c_write(I2C_BUS, SSD1306_ADDR, chr(CTRL_DATA) . $data);
+}
+
+function ssd1306_init() {
+    sleep_ms(200);
+
+    // Important:
+    // Use page addressing mode: 0x20, 0x02.
+    // The previous version used horizontal mode but then used page-addressing
+    // commands, which can fail depending on the module/controller clone.
+    ssd1306_cmd(
+        "\xae" .       // display off
+        "\xd5\x80" .   // display clock divide
+        "\xa8\x3f" .   // multiplex ratio 1/64
+        "\xd3\x00" .   // display offset
+        "\x40" .       // start line 0
+        "\x8d\x14" .   // charge pump on
+        "\x20\x02" .   // page addressing mode
+        "\xa1" .       // segment remap
+        "\xc8" .       // COM scan direction remap
+        "\xda\x12" .   // COM pins config for 128x64
+        "\x81\x7f" .   // contrast
+        "\xd9\xf1" .   // precharge
+        "\xdb\x40" .   // VCOMH deselect
+        "\xa4" .       // display follows RAM
+        "\xa6" .       // normal display
+        "\x2e" .       // deactivate scroll
+        "\xaf"         // display on
+    );
+}
+
+function ssd1306_set_pos($page, $col) {
+    // Page command: 0xB0 + page.
+    // Column 0:  low nibble 0x00, high nibble 0x10.
+    // Column 31: low nibble 0x0f, high nibble 0x11.
+    //
+    // This avoids bitwise operators, since the current PicoPHP subset
+    // does not yet implement them.
+    if ($col == 0) {
+        ssd1306_cmd(chr(176 + $page) . "\x00\x10");
+    } else {
+        ssd1306_cmd(chr(176 + $page) . "\x0f\x11");
+    }
+}
+
+function ssd1306_clear_page() {
+    $z16 = "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+
+    // 128 bytes.
+    ssd1306_data($z16);
+    ssd1306_data($z16);
+    ssd1306_data($z16);
+    ssd1306_data($z16);
+    ssd1306_data($z16);
+    ssd1306_data($z16);
+    ssd1306_data($z16);
+    ssd1306_data($z16);
+}
+
+function ssd1306_clear() {
+    $page = 0;
+    while ($page < 8) {
+        ssd1306_set_pos($page, 0);
+        ssd1306_clear_page();
+        $page = $page + 1;
+    }
+}
+
+function ssd1306_fill_page() {
+    $f16 = "\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff\xff";
+
+    // 128 bytes.
+    ssd1306_data($f16);
+    ssd1306_data($f16);
+    ssd1306_data($f16);
+    ssd1306_data($f16);
+    ssd1306_data($f16);
+    ssd1306_data($f16);
+    ssd1306_data($f16);
+    ssd1306_data($f16);
+}
+
+function ssd1306_test_flash() {
+    // Quick visual test: fill screen, wait, then clear.
+    $page = 0;
+    while ($page < 8) {
+        ssd1306_set_pos($page, 0);
+        ssd1306_fill_page();
+        $page = $page + 1;
+    }
+
+    sleep_ms(500);
+    ssd1306_clear();
+    sleep_ms(100);
+}
+
+function glyph_H() {
+    return "\x7f\x08\x08\x08\x7f";
+}
+
+function glyph_e() {
+    return "\x38\x54\x54\x54\x18";
+}
+
+function glyph_l() {
+    return "\x00\x41\x7f\x40\x00";
+}
+
+function glyph_o() {
+    return "\x38\x44\x44\x44\x38";
+}
+
+function glyph_space() {
+    return "\x00\x00\x00\x00\x00";
+}
+
+function glyph_W() {
+    return "\x7f\x20\x18\x20\x7f";
+}
+
+function glyph_r() {
+    return "\x7c\x08\x04\x04\x08";
+}
+
+function glyph_d() {
+    return "\x38\x44\x44\x48\x7f";
+}
+
+function draw_glyph($g) {
+    ssd1306_data($g . "\x00");
+}
+
+function draw_hello_world_center() {
+    // "Hello World": 11 chars * 6 px = 66 px.
+    // Center x = (128 - 66) / 2 = 31.
+    // Page 3 gives y = 24, visually near center for a 7px font.
+    ssd1306_set_pos(3, 31);
+
+    draw_glyph(glyph_H());
+    draw_glyph(glyph_e());
+    draw_glyph(glyph_l());
+    draw_glyph(glyph_l());
+    draw_glyph(glyph_o());
+    draw_glyph(glyph_space());
+    draw_glyph(glyph_W());
+    draw_glyph(glyph_o());
+    draw_glyph(glyph_r());
+    draw_glyph(glyph_l());
+    draw_glyph(glyph_d());
+}
+
+i2c_init(I2C_BUS, I2C_SDA, I2C_SCL, I2C_BAUD);
+
+ssd1306_init();
+
+// First do a full-screen flash. If this does not appear, the issue is probably
+// I2C address, wiring, or VM native I2C implementation.
+ssd1306_test_flash();
+
+draw_hello_world_center();
+
+while (true) {
+    sleep_ms(1000);
+}
