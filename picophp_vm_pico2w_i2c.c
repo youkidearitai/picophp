@@ -233,6 +233,9 @@ typedef struct {
     VmStatus status;
 } Vm;
 
+static float value_as_float(Value v);
+static bool vm_alloc_string(Vm *vm, uint16_t len, uint8_t **out);
+
 static Value v_null(void) {
     Value v;
     v.type = VAL_NULL;
@@ -579,6 +582,10 @@ static bool string_concat(Vm *vm, Value a, Value b, Value *out) {
 }
 
 static bool native_chr(Vm *vm, Value arg, Value *out) {
+    if (arg.type == VAL_FLOAT) {
+        return (int32_t)arg.as.f;
+    }
+
     int32_t x = value_as_int(arg);
     if (x < 0 || x > 255) {
         vm->status = VM_ERR_TYPE;
