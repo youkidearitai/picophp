@@ -22,9 +22,20 @@ print("after chunked full clear\n");
 ssd1306_text_center(I2C_BUS, OLED_ADDR, "Hello World");
 print("after draw\n");
 
+$i = 1;
+
 while (true) {
+    ssd1306_clear_chunked(I2C_BUS, OLED_ADDR);
+    ssd1306_set_pos(I2C_BUS, OLED_ADDR, $i, 0);
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, "Hello");
+
+    arena_reset();
+
     led_write(HIGH);
     sleep_ms(500);
     led_write(LOW);
     sleep_ms(500);
+
+    $i = $i + 1;
+    $i = $i % 8;
 }

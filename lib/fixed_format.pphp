@@ -1,0 +1,56 @@
+<?php
+// fixed_format.pphp
+// Small integer/fixed-point formatting helpers for PicoPHP.
+
+function digit_char($d) {
+    return chr(48 + $d);
+}
+
+function int_to_string($x) {
+    if ($x < 0) {
+        return "-" . int_to_string(0 - $x);
+    }
+
+    if ($x == 0) {
+        return "0";
+    }
+
+    $s = "";
+    $started = 0;
+
+    $d = 0;
+    while ($x >= 10000) { $x = $x - 10000; $d = $d + 1; }
+    if ($d > 0) { $s = $s . digit_char($d); $started = 1; }
+
+    $d = 0;
+    while ($x >= 1000) { $x = $x - 1000; $d = $d + 1; }
+    if ($started == 1) { $s = $s . digit_char($d); }
+    if ($started == 0) { if ($d > 0) { $s = $s . digit_char($d); $started = 1; } }
+
+    $d = 0;
+    while ($x >= 100) { $x = $x - 100; $d = $d + 1; }
+    if ($started == 1) { $s = $s . digit_char($d); }
+    if ($started == 0) { if ($d > 0) { $s = $s . digit_char($d); $started = 1; } }
+
+    $d = 0;
+    while ($x >= 10) { $x = $x - 10; $d = $d + 1; }
+    if ($started == 1) { $s = $s . digit_char($d); }
+    if ($started == 0) { if ($d > 0) { $s = $s . digit_char($d); $started = 1; } }
+
+    $s = $s . digit_char($x);
+    return $s;
+}
+
+function dec1_to_string($x) {
+    if ($x < 0) {
+        return "-" . dec1_to_string(0 - $x);
+    }
+
+    $whole = 0;
+    while ($x >= 10) {
+        $x = $x - 10;
+        $whole = $whole + 1;
+    }
+
+    return int_to_string($whole) . "." . digit_char($x);
+}

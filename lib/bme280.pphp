@@ -1,0 +1,173 @@
+<?php
+// bme280.pphp
+//
+// BME280 I2C helper for PicoPHP.
+//
+// Address is usually 0x76 or 0x77.
+// Uses float compensation formulas and returns fixed-point values:
+//   bme280_read_temp10(...)      => Celsius * 10
+//   bme280_read_humidity10(...)  => %RH * 10
+//   bme280_read_pressure10(...)  => hPa * 10
+//
+// Required native functions:
+//   i2c_write(bus, addr, data)
+//   i2c_write_read(bus, addr, write_data, read_len)
+//   sleep_ms(ms)
+//   chr(n)
+//
+// PicoPHP note:
+//   i2c_write_read() returns an arena string. Call arena_reset()/frame_end()
+//   after each display frame if you loop forever.
+
+function bme280_u8($bus, $addr, $reg) {
+    $d = i2c_write_read($bus, $addr, chr($reg), 1);
+    return $d[0];
+}
+
+function bme280_i8($bus, $addr, $reg) {
+    $v = bme280_u8($bus, $addr, $reg);
+    if ($v >= 128) {
+        return $v - 256;
+    }
+    return $v;
+}
+
+function bme280_u16le($bus, $addr, $reg) {
+    $d = i2c_write_read($bus, $addr, chr($reg), 2);
+    return $d[0] + ($d[1] << 8);
+}
+
+function bme280_i16le($bus, $addr, $reg) {
+    $v = bme280_u16le($bus, $addr, $reg);
+    if ($v >= 32768) {
+        return $v - 65536;
+    }
+    return $v;
+}
+
+function bme280_s12($v) {
+    if ($v >= 2048) {
+        return $v - 4096;
+    }
+    return $v;
+}
+
+function bme280_chip_id($bus, $addr) {
+    return bme280_u8($bus, $addr, 208); // 0xd0, BME280 should be 0x60
+}
+
+function bme280_init($bus, $addr) {
+    // Humidity oversampling x1. Must be written before ctrl_meas.
+    i2c_write($bus, $addr, "\xf2\x01");
+
+    // Normal mode, temp x1, pressure x1.
+    // 0x27 = osrs_t x1, osrs_p x1, mode normal
+    i2c_write($bus, $addr, "\xf4\x27");
+
+    // Standby 1000ms, filter off.
+    i2c_write($bus, $addr, "\xf5\xa0");
+
+    sleep_ms(100);
+}
+
+function bme280_raw_temp($bus, $addr) {
+    $d = i2c_write_read($bus, $addr, "\xfa", 3);
+    return ($d[0] << 12) | ($d[1] << 4) | ($d[2] >> 4);
+}
+
+function bme280_raw_press($bus, $addr) {
+    $d = i2c_write_read($bus, $addr, "\xf7", 3);
+    return ($d[0] << 12) | ($d[1] << 4) | ($d[2] >> 4);
+}
+
+function bme280_raw_hum($bus, $addr) {
+    $d = i2c_write_read($bus, $addr, "\xfd", 2);
+    return ($d[0] << 8) | $d[1];
+}
+
+function bme280_t_fine($bus, $addr) {
+    $dig_T1 = bme280_u16le($bus, $addr, 136); // 0x88
+    $dig_T2 = bme280_i16le($bus, $addr, 138); // 0x8a
+    $dig_T3 = bme280_i16le($bus, $addr, 140); // 0x8c
+
+    $adc_T = bme280_raw_temp($bus, $addr);
+
+    $var1 = (($adc_T / 16384.0) - ($dig_T1 / 1024.0)) * $dig_T2;
+    $var2 = (($adc_T / 131072.0) - ($dig_T1 / 8192.0));
+    $var2 = $var2 * $var2 * $dig_T3;
+
+    return $var1 + $var2;
+}
+
+function bme280_read_temp10($bus, $addr) {
+    $tf = bme280_t_fine($bus, $addr);
+    return ($tf / 5120.0) * 10.0;
+}
+
+function bme280_read_pressure10($bus, $addr) {
+    $dig_P1 = bme280_u16le($bus, $addr, 142); // 0x8e
+    $dig_P2 = bme280_i16le($bus, $addr, 144);
+    $dig_P3 = bme280_i16le($bus, $addr, 146);
+    $dig_P4 = bme280_i16le($bus, $addr, 148);
+    $dig_P5 = bme280_i16le($bus, $addr, 150);
+    $dig_P6 = bme280_i16le($bus, $addr, 152);
+    $dig_P7 = bme280_i16le($bus, $addr, 154);
+    $dig_P8 = bme280_i16le($bus, $addr, 156);
+    $dig_P9 = bme280_i16le($bus, $addr, 158);
+
+    $adc_P = bme280_raw_press($bus, $addr);
+    $tf = bme280_t_fine($bus, $addr);
+
+    $var1 = ($tf / 2.0) - 64000.0;
+    $var2 = $var1 * $var1 * $dig_P6 / 32768.0;
+    $var2 = $var2 + ($var1 * $dig_P5 * 2.0);
+    $var2 = ($var2 / 4.0) + ($dig_P4 * 65536.0);
+    $var1 = (($dig_P3 * $var1 * $var1 / 524288.0) + ($dig_P2 * $var1)) / 524288.0;
+    $var1 = (1.0 + ($var1 / 32768.0)) * $dig_P1;
+
+    if ($var1 == 0) {
+        return 0;
+    }
+
+    $p = 1048576.0 - $adc_P;
+    $p = (($p - ($var2 / 4096.0)) * 6250.0) / $var1;
+    $var1 = $dig_P9 * $p * $p / 2147483648.0;
+    $var2 = $p * $dig_P8 / 32768.0;
+    $p = $p + (($var1 + $var2 + $dig_P7) / 16.0);
+
+    // p is Pa. Return hPa * 10, i.e. Pa / 10.
+    return $p / 10.0;
+}
+
+function bme280_read_humidity10($bus, $addr) {
+    $dig_H1 = bme280_u8($bus, $addr, 161); // 0xa1
+    $dig_H2 = bme280_i16le($bus, $addr, 225); // 0xe1
+    $dig_H3 = bme280_u8($bus, $addr, 227); // 0xe3
+
+    $e4 = bme280_u8($bus, $addr, 228);
+    $e5 = bme280_u8($bus, $addr, 229);
+    $e6 = bme280_u8($bus, $addr, 230);
+
+    $dig_H4 = bme280_s12(($e4 << 4) | ($e5 & 15));
+    $dig_H5 = bme280_s12(($e6 << 4) | ($e5 >> 4));
+    $dig_H6 = bme280_i8($bus, $addr, 231);
+
+    $adc_H = bme280_raw_hum($bus, $addr);
+    $tf = bme280_t_fine($bus, $addr);
+
+    $h = $tf - 76800.0;
+    $h = ($adc_H - (($dig_H4 * 64.0) + (($dig_H5 / 16384.0) * $h))) *
+        (($dig_H2 / 65536.0) * (1.0 + (($dig_H6 / 67108864.0) * $h *
+        (1.0 + (($dig_H3 / 67108864.0) * $h)))));
+    $h = $h * (1.0 - (($dig_H1 * $h) / 524288.0));
+
+    if ($h > 100.0) {
+        $h = 100.0;
+    }
+
+    if ($h < 0.0) {
+        $h = 0.0;
+    }
+
+    return $h * 10.0;
+}

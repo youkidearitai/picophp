@@ -39,6 +39,28 @@
 #endif
 #endif
 
+#ifdef PICOPHP_ON_PICO
+static void picophp_debug_led_set(bool on) {
+#if defined(CYW43_WL_GPIO_LED_PIN)
+    cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, on ? 1 : 0);
+#elif defined(PICO_DEFAULT_LED_PIN)
+    gpio_put(PICO_DEFAULT_LED_PIN, on ? 1 : 0);
+#else
+    (void)on;
+#endif
+}
+
+#ifdef PICOPHP_ON_PICO
+static void picophp_boot_blink(int count, int on_ms, int off_ms) {
+    for (int i = 0; i < count; i++) {
+        picophp_debug_led_set(true);
+        sleep_ms(on_ms);
+        picophp_debug_led_set(false);
+        sleep_ms(off_ms);
+    }
+}
+#endif
+
 #ifndef PICOPHP_STACK_MAX
 #define PICOPHP_STACK_MAX       128
 #endif
@@ -53,6 +75,10 @@
 
 #ifndef PICOPHP_CALL_MAX
 #define PICOPHP_CALL_MAX         16
+#endif
+
+#ifndef PICOPHP_USB_WAIT_MS
+#define PICOPHP_USB_WAIT_MS    2000
 #endif
 
 typedef enum {
@@ -164,6 +190,8 @@ typedef enum {
     NATIVE_I2C_WRITE_READ = 17,
     NATIVE_I2C_SCAN = 18,
     NATIVE_I2C_WRITE_CTRL = 19,
+    NATIVE_ARENA_RESET = 20,
+    NATIVE_FORMAT_DEC1 = 21,
 } NativeId;
 
 typedef enum {
@@ -251,6 +279,63 @@ static int32_t value_as_int(Value v) {
         case VAL_FLOAT: return (int32_t)v.as.f;
         default: return 0;
     }
+}
+
+static bool native_format_dec1(Vm *vm, Value arg, Value *ret) {
+    /*
+     * Format a numeric value scaled by 10.
+     *
+     * Example:
+     *   234     => "23.4"
+     *   10132   => "1013.2"
+     *   -53     => "-5.3"
+     *
+     * This avoids doing decimal string formatting in PicoPHP code, where
+     * float/int mixing can easily reach CONCAT/CHR type errors.
+     */
+    float xf = value_as_float(arg);
+    int32_t scaled;
+
+    if (xf >= 0.0f) {
+        scaled = (int32_t)(xf + 0.5f);
+    } else {
+        scaled = (int32_t)(xf - 0.5f);
+    }
+
+    bool neg = scaled < 0;
+    if (neg) {
+        scaled = -scaled;
+    }
+
+    int32_t whole = scaled / 10;
+    int32_t frac = scaled % 10;
+
+    char tmp[24];
+    int n = snprintf(
+        tmp,
+        sizeof(tmp),
+        neg ? "-%ld.%ld" : "%ld.%ld",
+        (long)whole,
+        (long)frac
+    );
+
+    if (n < 0 || n >= (int)sizeof(tmp)) {
+        vm->status = VM_ERR_OOM;
+        return false;
+    }
+
+    uint8_t *buf = NULL;
+    if (!vm_alloc_string(vm, (uint16_t)n, &buf)) {
+        return false;
+    }
+
+    memcpy(buf, tmp, (size_t)n);
+
+    ret->type = VAL_STRING;
+    ret->as.s.len = (uint16_t)n;
+    ret->as.s.flags = STR_FLAG_ARENA;
+    ret->as.s.data = buf;
+    return true;
 }
 
 static float value_as_float(Value v) {
@@ -552,6 +637,29 @@ static bool native_bin2hex(Vm *vm, Value arg, Value *out) {
     out->as.s.len = (uint16_t)total;
     out->as.s.flags = STR_FLAG_ARENA;
     out->as.s.data = buf;
+    return true;
+}
+
+
+static bool native_arena_reset(Vm *vm, Value *ret) {
+    /*
+     * Reset the temporary string arena.
+     *
+     * This invalidates every string with STR_FLAG_ARENA.  Constant strings are
+     * not stored in this arena and remain valid.
+     *
+     * Safe usage pattern:
+     *   - build temporary strings
+     *   - send/use them immediately
+     *   - call arena_reset() after the frame/transaction is complete
+     *
+     * Unsafe:
+     *   - store a dynamically concatenated string in a variable/global
+     *   - call arena_reset()
+     *   - use that string afterwards
+     */
+    vm->string_used = 0;
+    *ret = v_null();
     return true;
 }
 
@@ -969,6 +1077,20 @@ static bool call_native(Vm *vm, uint8_t id, uint8_t argc) {
             }
             break;
 
+        case NATIVE_ARENA_RESET:
+            if (argc != 0) goto bad_arity;
+            if (!native_arena_reset(vm, &ret)) {
+                return false;
+            }
+            break;
+
+        case NATIVE_FORMAT_DEC1:
+            if (argc != 1) goto bad_arity;
+            if (!native_format_dec1(vm, args[0], &ret)) {
+                return false;
+            }
+            break;
+
         default:
             vm->status = VM_ERR_BAD_NATIVE;
             return false;
@@ -1288,16 +1410,31 @@ static const unsigned picophp_program_func_count = 0;
 int main(void) {
 #ifdef PICOPHP_ON_PICO
     stdio_init_all();
+    sleep_ms(PICOPHP_USB_WAIT_MS);
+    printf("\n[PicoPHP] boot\n");
+    fflush(stdout);
+#endif
 
 #if defined(CYW43_WL_GPIO_LED_PIN)
     if (cyw43_arch_init()) {
-        printf("cyw43_arch_init failed\n");
-        return 1;
+        while (true) {
+            printf("[PicoPHP] cyw43_arch_init failed\n");
+            fflush(stdout);
+            sleep_ms(1000);
+        }
     }
 #elif defined(PICO_DEFAULT_LED_PIN)
     gpio_init(PICO_DEFAULT_LED_PIN);
     gpio_set_dir(PICO_DEFAULT_LED_PIN, GPIO_OUT);
 #endif
+    printf("[PicoPHP] platform init ok\n");
+    fflush(stdout);
+#endif
+
+#ifdef PICOPHP_ON_PICO
+    printf("[PicoPHP] boot blink before vm_init\n");
+    fflush(stdout);
+    picophp_boot_blink(5, 120, 120);
 #endif
 
     Vm vm;
@@ -1311,6 +1448,12 @@ int main(void) {
         picophp_program_func_count
     );
 
+#ifdef PICOPHP_ON_PICO
+    printf("[PicoPHP] entering vm_run\n");
+    fflush(stdout);
+    picophp_boot_blink(2, 300, 150);
+#endif
+
     VmStatus st = vm_run(&vm);
 #ifdef PICOPHP_ON_PICO
 #if defined(CYW43_WL_GPIO_LED_PIN)
@@ -1319,9 +1462,31 @@ int main(void) {
 #endif
 
     if (st != VM_OK) {
+#ifdef PICOPHP_ON_PICO
+        while (true) {
+            printf("\nFatal VM error: %s at ip=%zu\n", vm_status_name(st), vm.ip);
+            fflush(stdout);
+            picophp_debug_led_set(true);
+            sleep_ms(150);
+            picophp_debug_led_set(false);
+            sleep_ms(850);
+        }
+#else
         printf("\nFatal VM error: %s at ip=%zu\n", vm_status_name(st), vm.ip);
         return 1;
+#endif
     }
+
+#ifdef PICOPHP_ON_PICO
+    while (true) {
+        printf("[PicoPHP] program finished normally\n");
+        fflush(stdout);
+        picophp_debug_led_set(true);
+        sleep_ms(500);
+        picophp_debug_led_set(false);
+        sleep_ms(500);
+    }
+#endif
 
     return 0;
 }

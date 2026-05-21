@@ -1,0 +1,113 @@
+<?php
+// bmp280_guard2.pphp
+//
+// BMP280 driver with safer pressure guards for PicoPHP.
+// Use this when temperature works but pressure triggers division by zero.
+
+function bmp280_u8($bus, $addr, $reg) {
+    $d = i2c_write_read($bus, $addr, chr($reg), 1);
+    return $d[0];
+}
+
+function bmp280_u16le($bus, $addr, $reg) {
+    $d = i2c_write_read($bus, $addr, chr($reg), 2);
+    return $d[0] + ($d[1] << 8);
+}
+
+function bmp280_i16le($bus, $addr, $reg) {
+    $v = bmp280_u16le($bus, $addr, $reg);
+    if ($v >= 32768) {
+        return $v - 65536;
+    }
+    return $v;
+}
+
+function bmp280_chip_id($bus, $addr) {
+    return bmp280_u8($bus, $addr, 208); // 0xd0, BMP280 = 0x58 = 88
+}
+
+function bmp280_init($bus, $addr) {
+    // Soft reset.
+    i2c_write($bus, $addr, "\xe0\xb6");
+    sleep_ms(100);
+
+    // Normal mode, temp x1, pressure x1.
+    i2c_write($bus, $addr, "\xf4\x27");
+
+    // Standby 1000ms, filter off.
+    i2c_write($bus, $addr, "\xf5\xa0");
+
+    sleep_ms(100);
+}
+
+function bmp280_raw_temp($bus, $addr) {
+    $d = i2c_write_read($bus, $addr, "\xfa", 3);
+    return ($d[0] << 12) | ($d[1] << 4) | ($d[2] >> 4);
+}
+
+function bmp280_raw_press($bus, $addr) {
+    $d = i2c_write_read($bus, $addr, "\xf7", 3);
+    return ($d[0] << 12) | ($d[1] << 4) | ($d[2] >> 4);
+}
+
+function bmp280_t_fine($bus, $addr) {
+    $dig_T1 = bmp280_u16le($bus, $addr, 136);
+    $dig_T2 = bmp280_i16le($bus, $addr, 138);
+    $dig_T3 = bmp280_i16le($bus, $addr, 140);
+
+    $adc_T = bmp280_raw_temp($bus, $addr);
+
+    $var1 = (($adc_T / 16384.0) - ($dig_T1 / 1024.0)) * $dig_T2;
+    $var2 = (($adc_T / 131072.0) - ($dig_T1 / 8192.0));
+    $var2 = $var2 * $var2 * $dig_T3;
+
+    return $var1 + $var2;
+}
+
+function bmp280_read_temp10($bus, $addr) {
+    $tf = bmp280_t_fine($bus, $addr);
+    return ($tf / 5120.0) * 10.0;
+}
+
+function bmp280_read_pressure10($bus, $addr) {
+    $dig_P1 = bmp280_u16le($bus, $addr, 142);
+
+    // dig_P1 must be non-zero. If it is zero, calibration data was not read.
+    if ($dig_P1 < 1) {
+        return 0;
+    }
+
+    $dig_P2 = bmp280_i16le($bus, $addr, 144);
+    $dig_P3 = bmp280_i16le($bus, $addr, 146);
+    $dig_P4 = bmp280_i16le($bus, $addr, 148);
+    $dig_P5 = bmp280_i16le($bus, $addr, 150);
+    $dig_P6 = bmp280_i16le($bus, $addr, 152);
+    $dig_P7 = bmp280_i16le($bus, $addr, 154);
+    $dig_P8 = bmp280_i16le($bus, $addr, 156);
+    $dig_P9 = bmp280_i16le($bus, $addr, 158);
+
+    $adc_P = bmp280_raw_press($bus, $addr);
+    $tf = bmp280_t_fine($bus, $addr);
+
+    $var1 = ($tf / 2.0) - 64000.0;
+    $var2 = $var1 * $var1 * $dig_P6 / 32768.0;
+    $var2 = $var2 + ($var1 * $dig_P5 * 2.0);
+    $var2 = ($var2 / 4.0) + ($dig_P4 * 65536.0);
+    $var1 = (($dig_P3 * $var1 * $var1 / 524288.0) + ($dig_P2 * $var1)) / 524288.0;
+    $var1 = (1.0 + ($var1 / 32768.0)) * $dig_P1;
+
+    // On a valid BMP280 this should be a positive value.
+    // Use < 1 instead of == 0 because PicoPHP numeric values may be float-ish.
+    if ($var1 < 1.0) {
+        return 0;
+    }
+
+    $p = 1048576.0 - $adc_P;
+    $p = (($p - ($var2 / 4096.0)) * 6250.0) / $var1;
+    $var1 = $dig_P9 * $p * $p / 2147483648.0;
+    $var2 = $p * $dig_P8 / 32768.0;
+    $p = $p + (($var1 + $var2 + $dig_P7) / 16.0);
+
+    // p is Pa. Return hPa * 10.
+    return $p / 10.0;
+}

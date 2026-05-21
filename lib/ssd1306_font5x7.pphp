@@ -1,0 +1,131 @@
+<?php
+// ssd1306_font5x7.pphp
+//
+// 5x7 ASCII font for SSD1306 page addressing mode.
+// Each glyph is 5 bytes:
+//   - 1 byte = 1 vertical column, bit0 at top, bit6 at bottom
+//   - bit7 is unused/blank
+//
+// Intended usage:
+//   ssd1306_data($bus, $addr, ssd1306_glyph($text[$i]) . "\x00");
+//
+// Supported:
+//   space, punctuation subset, 0-9, A-Z, a-z
+//
+// PicoPHP note:
+//   This is intentionally written as if/return chains because current PicoPHP
+//   has no array/table literal support.
+
+function ssd1306_glyph($ch) {
+    // Space and punctuation
+    if ($ch == 32) { return "\x00\x00\x00\x00\x00"; } // space
+    if ($ch == 33) { return "\x00\x00\x5f\x00\x00"; } // !
+    if ($ch == 34) { return "\x00\x07\x00\x07\x00"; } // "
+    if ($ch == 35) { return "\x14\x7f\x14\x7f\x14"; } // #
+    if ($ch == 36) { return "\x24\x2a\x7f\x2a\x12"; } // $
+    if ($ch == 37) { return "\x23\x13\x08\x64\x62"; } // %
+    if ($ch == 38) { return "\x36\x49\x55\x22\x50"; } // &
+    if ($ch == 39) { return "\x00\x05\x03\x00\x00"; } // '
+    if ($ch == 40) { return "\x00\x1c\x22\x41\x00"; } // (
+    if ($ch == 41) { return "\x00\x41\x22\x1c\x00"; } // )
+    if ($ch == 42) { return "\x14\x08\x3e\x08\x14"; } // *
+    if ($ch == 43) { return "\x08\x08\x3e\x08\x08"; } // +
+    if ($ch == 44) { return "\x00\x50\x30\x00\x00"; } // ,
+    if ($ch == 45) { return "\x08\x08\x08\x08\x08"; } // -
+    if ($ch == 46) { return "\x00\x60\x60\x00\x00"; } // .
+    if ($ch == 47) { return "\x20\x10\x08\x04\x02"; } // /
+
+    // 0-9
+    if ($ch == 48) { return "\x3e\x51\x49\x45\x3e"; } // 0
+    if ($ch == 49) { return "\x00\x42\x7f\x40\x00"; } // 1
+    if ($ch == 50) { return "\x42\x61\x51\x49\x46"; } // 2
+    if ($ch == 51) { return "\x21\x41\x45\x4b\x31"; } // 3
+    if ($ch == 52) { return "\x18\x14\x12\x7f\x10"; } // 4
+    if ($ch == 53) { return "\x27\x45\x45\x45\x39"; } // 5
+    if ($ch == 54) { return "\x3c\x4a\x49\x49\x30"; } // 6
+    if ($ch == 55) { return "\x01\x71\x09\x05\x03"; } // 7
+    if ($ch == 56) { return "\x36\x49\x49\x49\x36"; } // 8
+    if ($ch == 57) { return "\x06\x49\x49\x29\x1e"; } // 9
+
+    // More punctuation
+    if ($ch == 58) { return "\x00\x36\x36\x00\x00"; } // :
+    if ($ch == 59) { return "\x00\x56\x36\x00\x00"; } // ;
+    if ($ch == 60) { return "\x08\x14\x22\x41\x00"; } // <
+    if ($ch == 61) { return "\x14\x14\x14\x14\x14"; } // =
+    if ($ch == 62) { return "\x00\x41\x22\x14\x08"; } // >
+    if ($ch == 63) { return "\x02\x01\x51\x09\x06"; } // ?
+    if ($ch == 64) { return "\x32\x49\x79\x41\x3e"; } // @
+
+    // A-Z
+    if ($ch == 65) { return "\x7e\x11\x11\x11\x7e"; } // A
+    if ($ch == 66) { return "\x7f\x49\x49\x49\x36"; } // B
+    if ($ch == 67) { return "\x3e\x41\x41\x41\x22"; } // C
+    if ($ch == 68) { return "\x7f\x41\x41\x22\x1c"; } // D
+    if ($ch == 69) { return "\x7f\x49\x49\x49\x41"; } // E
+    if ($ch == 70) { return "\x7f\x09\x09\x09\x01"; } // F
+    if ($ch == 71) { return "\x3e\x41\x49\x49\x7a"; } // G
+    if ($ch == 72) { return "\x7f\x08\x08\x08\x7f"; } // H
+    if ($ch == 73) { return "\x00\x41\x7f\x41\x00"; } // I
+    if ($ch == 74) { return "\x20\x40\x41\x3f\x01"; } // J
+    if ($ch == 75) { return "\x7f\x08\x14\x22\x41"; } // K
+    if ($ch == 76) { return "\x7f\x40\x40\x40\x40"; } // L
+    if ($ch == 77) { return "\x7f\x02\x0c\x02\x7f"; } // M
+    if ($ch == 78) { return "\x7f\x04\x08\x10\x7f"; } // N
+    if ($ch == 79) { return "\x3e\x41\x41\x41\x3e"; } // O
+    if ($ch == 80) { return "\x7f\x09\x09\x09\x06"; } // P
+    if ($ch == 81) { return "\x3e\x41\x51\x21\x5e"; } // Q
+    if ($ch == 82) { return "\x7f\x09\x19\x29\x46"; } // R
+    if ($ch == 83) { return "\x46\x49\x49\x49\x31"; } // S
+    if ($ch == 84) { return "\x01\x01\x7f\x01\x01"; } // T
+    if ($ch == 85) { return "\x3f\x40\x40\x40\x3f"; } // U
+    if ($ch == 86) { return "\x1f\x20\x40\x20\x1f"; } // V
+    if ($ch == 87) { return "\x3f\x40\x38\x40\x3f"; } // W
+    if ($ch == 88) { return "\x63\x14\x08\x14\x63"; } // X
+    if ($ch == 89) { return "\x07\x08\x70\x08\x07"; } // Y
+    if ($ch == 90) { return "\x61\x51\x49\x45\x43"; } // Z
+
+    // Brackets and symbols
+    if ($ch == 91) { return "\x00\x7f\x41\x41\x00"; } // [
+    if ($ch == 92) { return "\x02\x04\x08\x10\x20"; } // backslash
+    if ($ch == 93) { return "\x00\x41\x41\x7f\x00"; } // ]
+    if ($ch == 94) { return "\x04\x02\x01\x02\x04"; } // ^
+    if ($ch == 95) { return "\x40\x40\x40\x40\x40"; } // _
+    if ($ch == 96) { return "\x00\x01\x02\x04\x00"; } // `
+
+    // a-z
+    if ($ch == 97)  { return "\x20\x54\x54\x54\x78"; } // a
+    if ($ch == 98)  { return "\x7f\x48\x44\x44\x38"; } // b
+    if ($ch == 99)  { return "\x38\x44\x44\x44\x20"; } // c
+    if ($ch == 100) { return "\x38\x44\x44\x48\x7f"; } // d
+    if ($ch == 101) { return "\x38\x54\x54\x54\x18"; } // e
+    if ($ch == 102) { return "\x08\x7e\x09\x01\x02"; } // f
+    if ($ch == 103) { return "\x0c\x52\x52\x52\x3e"; } // g
+    if ($ch == 104) { return "\x7f\x08\x04\x04\x78"; } // h
+    if ($ch == 105) { return "\x00\x44\x7d\x40\x00"; } // i
+    if ($ch == 106) { return "\x20\x40\x44\x3d\x00"; } // j
+    if ($ch == 107) { return "\x7f\x10\x28\x44\x00"; } // k
+    if ($ch == 108) { return "\x00\x41\x7f\x40\x00"; } // l
+    if ($ch == 109) { return "\x7c\x04\x18\x04\x78"; } // m
+    if ($ch == 110) { return "\x7c\x08\x04\x04\x78"; } // n
+    if ($ch == 111) { return "\x38\x44\x44\x44\x38"; } // o
+    if ($ch == 112) { return "\x7c\x14\x14\x14\x08"; } // p
+    if ($ch == 113) { return "\x08\x14\x14\x18\x7c"; } // q
+    if ($ch == 114) { return "\x7c\x08\x04\x04\x08"; } // r
+    if ($ch == 115) { return "\x48\x54\x54\x54\x20"; } // s
+    if ($ch == 116) { return "\x04\x3f\x44\x40\x20"; } // t
+    if ($ch == 117) { return "\x3c\x40\x40\x20\x7c"; } // u
+    if ($ch == 118) { return "\x1c\x20\x40\x20\x1c"; } // v
+    if ($ch == 119) { return "\x3c\x40\x30\x40\x3c"; } // w
+    if ($ch == 120) { return "\x44\x28\x10\x28\x44"; } // x
+    if ($ch == 121) { return "\x0c\x50\x50\x50\x3c"; } // y
+    if ($ch == 122) { return "\x44\x64\x54\x4c\x44"; } // z
+
+    // Braces and final ASCII symbols
+    if ($ch == 123) { return "\x00\x08\x36\x41\x00"; } // {
+    if ($ch == 124) { return "\x00\x00\x7f\x00\x00"; } // |
+    if ($ch == 125) { return "\x00\x41\x36\x08\x00"; } // }
+    if ($ch == 126) { return "\x08\x04\x08\x10\x08"; } // ~
+
+    // Unknown glyph: outlined box / replacement mark.
+    return "\x7f\x41\x5d\x41\x7f";
+}

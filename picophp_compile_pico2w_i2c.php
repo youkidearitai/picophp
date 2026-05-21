@@ -107,6 +107,8 @@ final class NativeId {
     public const NATIVE_I2C_WRITE_READ = 17;
     public const NATIVE_I2C_SCAN = 18;
     public const NATIVE_I2C_WRITE_CTRL = 19;
+    public const NATIVE_ARENA_RESET = 20;
+    public const NATIVE_FORMAT_DEC1 = 21;
 }
 
 const NATIVE_IDS = [
@@ -130,6 +132,8 @@ const NATIVE_IDS = [
     'i2c_write_read' => NativeId::NATIVE_I2C_WRITE_READ,
     'i2c_scan' => NativeId::NATIVE_I2C_SCAN,
     'i2c_write_ctrl' => NativeId::NATIVE_I2C_WRITE_CTRL,
+    'arena_reset' => NativeId::NATIVE_ARENA_RESET,
+    'format_dec1' => NativeId::NATIVE_FORMAT_DEC1,
 ];
 
 const DEFAULT_CONSTANTS = [
@@ -158,6 +162,7 @@ const NATIVE_NAMES = [
     10 => 'chr', 11 => 'ord', 12 => 'bin2hex', 13 => 'led_write',
     14 => 'i2c_init', 15 => 'i2c_write', 16 => 'i2c_read',
     17 => 'i2c_write_read', 18 => 'i2c_scan', 19 => 'i2c_write_ctrl',
+    20 => 'arena_reset', 21 => 'format_dec1',
 ];
 
 final class Token {
@@ -855,7 +860,7 @@ final class Compiler {
         if (isset($this->constMap[$key])) {
             return $this->constMap[$key];
         }
-        if (count($this->consts) >= 256) {
+        if (count($this->consts) >= 1024) {
             throw new PicoCompileError('too many constants');
         }
         $id = count($this->consts);

@@ -1,6 +1,7 @@
 <?php
 // lib/ssd1306.pphp
 // SSD1306 128x64 I2C helper library for PicoPHP.
+require "ssd1306_font5x7.pphp";
 
 const SSD1306_CTRL_CMD = 0;
 const SSD1306_CTRL_DATA = 64;
@@ -77,61 +78,6 @@ function ssd1306_clear_chunked($bus, $addr) {
         ssd1306_clear_page_chunked($bus, $addr, $page);
         $page = $page + 1;
     }
-}
-
-function ssd1306_glyph($ch) {
-    if ($ch == 32) { return "\x00\x00\x00\x00\x00"; }
-    if ($ch == 33) { return "\x00\x00\x5f\x00\x00"; }
-    if ($ch == 44) { return "\x00\x50\x30\x00\x00"; }
-    if ($ch == 45) { return "\x08\x08\x08\x08\x08"; }
-    if ($ch == 46) { return "\x00\x60\x60\x00\x00"; }
-    if ($ch == 48) { return "\x3e\x51\x49\x45\x3e"; }
-    if ($ch == 49) { return "\x00\x42\x7f\x40\x00"; }
-    if ($ch == 50) { return "\x42\x61\x51\x49\x46"; }
-    if ($ch == 51) { return "\x21\x41\x45\x4b\x31"; }
-    if ($ch == 52) { return "\x18\x14\x12\x7f\x10"; }
-    if ($ch == 53) { return "\x27\x45\x45\x45\x39"; }
-    if ($ch == 54) { return "\x3c\x4a\x49\x49\x30"; }
-    if ($ch == 55) { return "\x01\x71\x09\x05\x03"; }
-    if ($ch == 56) { return "\x36\x49\x49\x49\x36"; }
-    if ($ch == 57) { return "\x06\x49\x49\x29\x1e"; }
-    if ($ch == 58) { return "\x00\x36\x36\x00\x00"; }
-
-    if ($ch == 65) { return "\x7e\x11\x11\x11\x7e"; }
-    if ($ch == 66) { return "\x7f\x49\x49\x49\x36"; }
-    if ($ch == 67) { return "\x3e\x41\x41\x41\x22"; }
-    if ($ch == 68) { return "\x7f\x41\x41\x22\x1c"; }
-    if ($ch == 69) { return "\x7f\x49\x49\x49\x41"; }
-    if ($ch == 70) { return "\x7f\x09\x09\x09\x01"; }
-    if ($ch == 71) { return "\x3e\x41\x49\x49\x7a"; }
-    if ($ch == 72) { return "\x7f\x08\x08\x08\x7f"; }
-    if ($ch == 73) { return "\x00\x41\x7f\x41\x00"; }
-    if ($ch == 74) { return "\x20\x40\x41\x3f\x01"; }
-    if ($ch == 75) { return "\x7f\x08\x14\x22\x41"; }
-    if ($ch == 76) { return "\x7f\x40\x40\x40\x40"; }
-    if ($ch == 77) { return "\x7f\x02\x0c\x02\x7f"; }
-    if ($ch == 78) { return "\x7f\x04\x08\x10\x7f"; }
-    if ($ch == 79) { return "\x3e\x41\x41\x41\x3e"; }
-    if ($ch == 80) { return "\x7f\x09\x09\x09\x06"; }
-    if ($ch == 82) { return "\x7f\x09\x19\x29\x46"; }
-    if ($ch == 83) { return "\x46\x49\x49\x49\x31"; }
-    if ($ch == 84) { return "\x01\x01\x7f\x01\x01"; }
-    if ($ch == 85) { return "\x3f\x40\x40\x40\x3f"; }
-    if ($ch == 87) { return "\x7f\x20\x18\x20\x7f"; }
-    if ($ch == 89) { return "\x07\x08\x70\x08\x07"; }
-
-    if ($ch == 97) { return "\x20\x54\x54\x54\x78"; }
-    if ($ch == 100) { return "\x38\x44\x44\x48\x7f"; }
-    if ($ch == 101) { return "\x38\x54\x54\x54\x18"; }
-    if ($ch == 104) { return "\x7f\x08\x04\x04\x78"; }
-    if ($ch == 105) { return "\x00\x44\x7d\x40\x00"; }
-    if ($ch == 108) { return "\x00\x41\x7f\x40\x00"; }
-    if ($ch == 111) { return "\x38\x44\x44\x44\x38"; }
-    if ($ch == 114) { return "\x7c\x08\x04\x04\x08"; }
-    if ($ch == 116) { return "\x04\x3f\x44\x40\x20"; }
-    if ($ch == 119) { return "\x3c\x40\x30\x40\x3c"; }
-
-    return "\x00\x00\x00\x00\x00";
 }
 
 function ssd1306_write_char($bus, $addr, $ch) {
