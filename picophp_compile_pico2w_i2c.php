@@ -84,6 +84,8 @@ final class Op {
     public const OP_BIT_NOT = 34;
     public const OP_SHL = 35;
     public const OP_SHR = 36;
+
+    public const OP_CONST16 = 37;
 }
 
 final class NativeId {
@@ -818,6 +820,26 @@ final class Compiler {
         return $pos;
     }
 
+    private function emitU16(int $v): void {
+        if ($v < 0 || $v > 0xffff) {
+            throw new PicoCompileError("u16 operand out of range: {$v}");
+        }
+        $this->code[] = $v & 0xff;
+        $this->code[] = ($v >> 8) & 0xff;
+    }
+
+    private function emitConstId(int $id): void {
+        if ($id < 0 || $id > 0xffff) {
+            throw new PicoCompileError("constant id out of range: {$id}");
+        }
+        if ($id <= 0xff) {
+            $this->emit(Op::OP_CONST, $id);
+            return;
+        }
+        $this->emit(Op::OP_CONST16);
+        $this->emitU16($id);
+    }
+
     private function emitI16Placeholder(): int {
         $pos = count($this->code);
         $this->code[] = 0;
@@ -1088,7 +1110,7 @@ final class Compiler {
             } elseif ($expr->value === false) {
                 $this->emit(Op::OP_FALSE);
             } else {
-                $this->emit(Op::OP_CONST, $this->addConst($expr->value));
+                $this->emitConstId($this->addConst($expr->value));
             }
             return;
         }
@@ -1335,10 +1357,15 @@ function read_u8_from_code(array $code, int &$ip): int {
     return $code[$ip++] & 0xff;
 }
 
-function read_i16_from_code(array $code, int &$ip): int {
+function read_u16_from_code(array $code, int &$ip): int {
     $lo = read_u8_from_code($code, $ip);
     $hi = read_u8_from_code($code, $ip);
     $v = $lo | ($hi << 8);
+    return $lo | ($hi << 8);
+}
+
+function read_i16_from_code(array $code, int &$ip): int {
+    $v = read_u16_from_code($code, $ip);
     return ($v & 0x8000) ? ($v - 0x10000) : $v;
 }
 
@@ -1452,6 +1479,12 @@ function disassemble_code(array $code, array $consts, array $globals, array $fun
                 $arg = sprintf('#%d ; %s', $id, $desc);
                 break;
 
+            case Op::OP_CONST16:
+                $id = read_u16_from_code($code, $ip);
+                $desc = isset($consts[$id]) ? format_const_for_dump($consts[$id]) : '<bad const>';
+                $arg = sprintf('#%d ; %s', $id, $desc);
+                break;
+ 
             case Op::OP_GET_GLOBAL:
             case Op::OP_SET_GLOBAL:
                 $slot = read_u8_from_code($code, $ip);

@@ -167,6 +167,8 @@ typedef enum {
     OP_BIT_NOT = 34,
     OP_SHL = 35,
     OP_SHR = 36,
+
+    OP_CONST16 = 37,
 } OpCode;
 
 typedef enum {
@@ -445,6 +447,12 @@ static uint8_t read_u8(Vm *vm) {
         return 0;
     }
     return vm->code[vm->ip++];
+}
+
+static uint16_t read_u16(Vm *vm) {
+    uint8_t lo = read_u8(vm);
+    uint8_t hi = read_u8(vm);
+    return (uint16_t)lo | ((uint16_t)hi << 8);
 }
 
 static int16_t read_i16(Vm *vm) {
@@ -848,57 +856,114 @@ static bool native_i2c_read(Vm *vm, Value bus, Value addr, Value lenv, Value *re
     return true;
 }
 
-static bool native_i2c_write_read(Vm *vm, Value bus, Value addr, Value wr, Value read_lenv, Value *ret) {
-    if (wr.type != VAL_STRING) {
+static bool native_i2c_write_read(Vm *vm, int argc, Value *args, Value *ret) {
+#ifdef PICOPHP_ON_PICO
+    if (argc != 4) {
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if ((args[0].type != VAL_INT && args[0].type != VAL_FLOAT) ||
+        (args[1].type != VAL_INT && args[1].type != VAL_FLOAT) ||
+        args[2].type != VAL_STRING ||
+        (args[3].type != VAL_INT && args[3].type != VAL_FLOAT)) {
+        printf("[i2c_write_read] type error\n");
+        fflush(stdout);
         vm->status = VM_ERR_TYPE;
         return false;
     }
 
-    int32_t read_len = value_as_int(read_lenv);
-    if (read_len < 0 || read_len > UINT16_MAX) {
-        vm->status = VM_ERR_TYPE;
+    int bus = value_as_int(args[0]);
+    int addr = value_as_int(args[1]);
+    Value wv = args[2];
+    int read_len = value_as_int(args[3]);
+
+    if (bus < 0 || bus > 1) {
+        printf("[i2c_write_read] invalid bus=%d\n", bus);
+        fflush(stdout);
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (addr < 0 || addr > 0x7f) {
+        printf("[i2c_write_read] invalid addr=0x%02x\n", addr);
+        fflush(stdout);
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (read_len < 0 || read_len > 256) {
+        printf("[i2c_write_read] invalid read_len=%d\n", read_len);
+        fflush(stdout);
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (wv.as.s.len == 0) {
+        printf("[i2c_write_read] empty write buffer\n");
+        fflush(stdout);
+        vm->status = VM_ERR_BAD_NATIVE;
         return false;
     }
 
     uint8_t *buf = NULL;
     if (!vm_alloc_string(vm, (uint16_t)read_len, &buf)) {
+        printf("[i2c_write_read] vm_alloc_string failed len=%d\n", read_len);
+        fflush(stdout);
         return false;
     }
 
-#ifdef PICOPHP_ON_PICO
-    i2c_inst_t *i2c = native_get_i2c_bus(value_as_int(bus));
-    int r1 = i2c_write_blocking(
+    i2c_inst_t *i2c = bus == 0 ? i2c0 : i2c1;
+
+    int wr = i2c_write_blocking(
         i2c,
-        (uint8_t)value_as_int(addr),
-        wr.as.s.data,
-        wr.as.s.len,
+        (uint8_t)addr,
+        wv.as.s.data,
+        wv.as.s.len,
         true
     );
-    int r2 = i2c_read_blocking(
+
+    if (wr != (int)wv.as.s.len) {
+        printf("[i2c_write_read] write failed expected=%u got=%d\n",
+            (unsigned)wv.as.s.len,
+            wr
+        );
+        fflush(stdout);
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    int rr = i2c_read_blocking(
         i2c,
-        (uint8_t)value_as_int(addr),
+        (uint8_t)addr,
         buf,
         (size_t)read_len,
         false
     );
-    if (r1 < 0 || r2 < 0) {
+
+    if (rr != read_len) {
+        printf("[i2c_write_read] read failed expected=%d got=%d\n",
+            read_len,
+            rr
+        );
+        fflush(stdout);
         vm->status = VM_ERR_BAD_NATIVE;
         return false;
     }
-#else
-    memset(buf, 0, (size_t)read_len);
-    printf("[i2c_write_read bus=%ld addr=0x%02lx write_len=%u read_len=%ld]\n",
-        (long)value_as_int(bus),
-        (long)value_as_int(addr),
-        wr.as.s.len,
-        (long)read_len);
-#endif
 
     ret->type = VAL_STRING;
     ret->as.s.len = (uint16_t)read_len;
     ret->as.s.flags = STR_FLAG_ARENA;
     ret->as.s.data = buf;
+
     return true;
+#else
+    (void)vm;
+    (void)argc;
+    (void)args;
+    (void)ret;
+    return false;
+#endif
 }
 
 static void native_i2c_scan(int32_t bus) {
@@ -1067,7 +1132,7 @@ static bool call_native(Vm *vm, uint8_t id, uint8_t argc) {
 
         case NATIVE_I2C_WRITE_READ:
             if (argc != 4) goto bad_arity;
-            if (!native_i2c_write_read(vm, args[0], args[1], args[2], args[3], &ret)) {
+            if (!native_i2c_write_read(vm, argc, args, &ret)) {
                 return false;
             }
             break;
@@ -1125,6 +1190,15 @@ static VmStatus vm_run(Vm *vm) {
 
             case OP_CONST: {
                 uint8_t id = read_u8(vm);
+                if (id >= vm->const_count) {
+                    return vm->status = VM_ERR_BAD_CONST;
+                }
+                if (!push(vm, vm->consts[id])) return vm->status;
+                break;
+            }
+
+            case OP_CONST16: {
+                uint16_t id = read_u16(vm);
                 if (id >= vm->const_count) {
                     return vm->status = VM_ERR_BAD_CONST;
                 }

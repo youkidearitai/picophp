@@ -1,0 +1,53 @@
+<?php
+require_once "lib/ssd1306.pphp";
+require_once "lib/bmp280.pphp";
+
+const I2C_BUS = 0;
+const I2C_SDA = 4;
+const I2C_SCL = 5;
+const I2C_BAUD = 100000;
+
+const OLED_ADDR = 60;
+const BMP_ADDR = 119; // 0x76. Use 119 for 0x77.
+
+print("boot\n");
+
+i2c_init(I2C_BUS, I2C_SDA, I2C_SCL, I2C_BAUD);
+print("after i2c_init\n");
+
+print("BMP chip id: ", bmp280_chip_id(I2C_BUS, BMP_ADDR), "\n");
+
+bmp280_init(I2C_BUS, BMP_ADDR);
+ssd1306_init(I2C_BUS, OLED_ADDR);
+ssd1306_clear_chunked(I2C_BUS, OLED_ADDR);
+
+while (true) {
+    $t = bmp280_read_temp10(I2C_BUS, BMP_ADDR);
+    $p = bmp280_read_pressure10(I2C_BUS, BMP_ADDR);
+
+    $ts = format_dec1($t);
+    $ps = format_dec1($p);
+
+    print("T=", $ts, "C\n");
+    print("P=", $ps, "hPa\n");
+
+    ssd1306_clear_chunked(I2C_BUS, OLED_ADDR);
+
+    ssd1306_set_pos(I2C_BUS, OLED_ADDR, 2, 0);
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, "T:");
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, $ts);
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, "C");
+
+    ssd1306_set_pos(I2C_BUS, OLED_ADDR, 4, 0);
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, "P:");
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, $ps);
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, "hPa");
+
+    arena_reset();
+
+    led_write(HIGH);
+    sleep_ms(100);
+    led_write(LOW);
+
+    sleep_ms(1000);
+}
