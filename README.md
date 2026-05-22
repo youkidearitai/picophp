@@ -17,7 +17,25 @@ Embedded PHP(-like) for Raspberry Pi Pico W2
 
 ```
 git clone https://github.com/raspberrypi/pico-sdk.git $HOME/pico/pico-sdk
+cd $HOME/pico/pico-sdk
+git submodule init --update --recursive
 ```
+
+### Blink sample
+
+see [blink_pico2w.pphp](https://github.com/youkidearitai/picophp/blob/main/blink_pico2w.pphp)
+
+```
+<?php
+while (true) {
+    led_write(HIGH);
+    sleep_ms(500);
+    led_write(LOW);
+    sleep_ms(500);
+}
+```
+
+Blink Raspberry Pi Pico 2W's LED.
 
 ### Using SSD1306
 
