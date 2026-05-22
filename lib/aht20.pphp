@@ -1,0 +1,23 @@
+<?php
+
+function aht20_init($bus, $addr) {
+    sleep_ms(40);
+    $d = i2c_write_read($bus, $addr, "\x71", 1);
+    if ($d[0] == 0) {
+        i2c_write($bus, $addr, "\xbe\x08\x00");
+        sleep_ms(10);
+    }
+}
+
+function aht20_read_humid($bus, $addr) {
+    i2c_write($bus, $addr, "\xac\x33\x00");
+
+    sleep_ms(80);
+
+    $d = i2c_read($bus, $addr, 6);
+    $raw_humid = ($d[1] << 12) | ($d[2] << 4) | ($d[3] >> 4);
+    $humid = ($raw_humid * 1000) / 1048576;
+
+    return $humid;
+}
+
