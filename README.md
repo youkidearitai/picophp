@@ -1,4 +1,4 @@
-# picophp
+# picoPHP
 
 Embedded PHP(-like) for Raspberry Pi Pico W2
 
