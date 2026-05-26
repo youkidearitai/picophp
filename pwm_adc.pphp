@@ -1,0 +1,13 @@
+<?php
+
+adc_init(26);
+pwm_init(15, 1000);
+
+while (true) {
+    $raw = adc_read_gpio(26);       // 0..4095
+    $duty = ($raw * 65535) / 4095;  // 0..65535
+
+    pwm_write(15, $duty);
+
+    sleep_ms(10);
+}

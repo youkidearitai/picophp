@@ -35,6 +35,7 @@
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
 #include "hardware/adc.h"
+#include "hardware/pwm.h"
 #if __has_include("pico/cyw43_arch.h")
 #include "pico/cyw43_arch.h"
 #endif
@@ -423,6 +424,10 @@ typedef enum {
     NATIVE_ADC_INIT = 28,
     NATIVE_ADC_READ = 29,
     NATIVE_ADC_READ_GPIO = 30,
+
+    NATIVE_PWM_INIT = 31,
+    NATIVE_PWM_WRITE = 32,
+    NATIVE_PWM_WRITE_PERCENT = 33,
 } NativeId;
 
 typedef enum {
@@ -526,6 +531,152 @@ static bool adc_gpio_to_channel(int gpio, int *channel) {
     }
 
     return false;
+}
+
+static bool pwm_gpio_valid(int gpio) {
+    return gpio >= 0 && gpio <= 29;
+}
+
+static bool native_pwm_init(Vm *vm, int argc, Value *args, Value *ret) {
+#ifdef PICOPHP_ON_PICO
+    if (argc != 2) {
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (!value_is_number(args[0]) || !value_is_number(args[1])) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    int gpio = value_as_int(args[0]);
+    int freq_hz = value_as_int(args[1]);
+
+    if (!pwm_gpio_valid(gpio) || freq_hz <= 0) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    gpio_set_function((uint)gpio, GPIO_FUNC_PWM);
+
+    uint slice = pwm_gpio_to_slice_num((uint)gpio);
+
+    pwm_config cfg = pwm_get_default_config();
+
+    /*
+     * PWM clock = 125MHz on many Pico builds.
+     * freq = clock / (clkdiv * (wrap + 1))
+     *
+     * wrap=65535 fixed:
+     * clkdiv = 125000000 / (freq * 65536)
+     */
+    float div = 125000000.0f / ((float)freq_hz * 65536.0f);
+
+    if (div < 1.0f) {
+        div = 1.0f;
+    }
+
+    if (div > 255.0f) {
+        div = 255.0f;
+    }
+
+    pwm_config_set_clkdiv(&cfg, div);
+    pwm_config_set_wrap(&cfg, 65535);
+
+    pwm_init(slice, &cfg, true);
+
+    ret->type = VAL_NULL;
+    return true;
+#else
+    (void)vm;
+    (void)argc;
+    (void)args;
+    (void)ret;
+    return false;
+#endif
+}
+
+static bool native_pwm_write(Vm *vm, int argc, Value *args, Value *ret) {
+#ifdef PICOPHP_ON_PICO
+    if (argc != 2) {
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (!value_is_number(args[0]) || !value_is_number(args[1])) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    int gpio = value_as_int(args[0]);
+    int duty = value_as_int(args[1]);
+
+    if (!pwm_gpio_valid(gpio)) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    if (duty < 0) {
+        duty = 0;
+    }
+
+    if (duty > 65535) {
+        duty = 65535;
+    }
+
+    pwm_set_gpio_level((uint)gpio, (uint16_t)duty);
+
+    ret->type = VAL_NULL;
+    return true;
+#else
+    (void)vm;
+    (void)argc;
+    (void)args;
+    (void)ret;
+    return false;
+#endif
+}
+
+static bool native_pwm_write_percent(Vm *vm, int argc, Value *args, Value *ret) {
+#ifdef PICOPHP_ON_PICO
+    if (argc != 2) {
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (!value_is_number(args[0]) || !value_is_number(args[1])) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    int gpio = value_as_int(args[0]);
+    int percent = value_as_int(args[1]);
+
+    if (!pwm_gpio_valid(gpio)) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    if (percent < 0) {
+        percent = 0;
+    }
+
+    if (percent > 100) {
+        percent = 100;
+    }
+
+    int duty = (percent * 65535) / 100;
+    pwm_set_gpio_level((uint)gpio, (uint16_t)duty);
+
+    ret->type = VAL_NULL;
+    return true;
+#else
+    (void)vm;
+    (void)argc;
+    (void)args;
+    (void)ret;
+    return false;
+#endif
 }
 
 static bool native_adc_init(Vm *vm, int argc, Value *args, Value *ret) {
@@ -1729,6 +1880,24 @@ static bool call_native(Vm *vm, uint8_t id, uint8_t argc) {
 
         case NATIVE_ADC_READ_GPIO:
             if (!native_adc_read_gpio(vm, argc, args, &ret)) {
+                return false;
+            }
+            break;
+
+        case NATIVE_PWM_INIT:
+            if (!native_pwm_init(vm, argc, args, &ret)) {
+                return false;
+            }
+            break;
+
+        case NATIVE_PWM_WRITE:
+            if (!native_pwm_write(vm, argc, args, &ret)) {
+                return false;
+            }
+            break;
+
+        case NATIVE_PWM_WRITE_PERCENT:
+            if (!native_pwm_write_percent(vm, argc, args, &ret)) {
                 return false;
             }
             break;

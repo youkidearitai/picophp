@@ -1,0 +1,18 @@
+<?php
+
+adc_init(26);
+
+while (true) {
+    $raw = adc_read_gpio(26);
+
+    // VREF=3.3V想定。mVで返す。
+    $mv = ($raw * 3300) / 4095;
+
+//    print("raw=");
+//    print($raw);
+    print(" mv=");
+    print($mv);
+    print("\n");
+
+    sleep_ms(500);
+}

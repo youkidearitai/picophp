@@ -152,6 +152,7 @@ if(PICOPHP_USB_KEYBOARD)
         hardware_gpio
         hardware_i2c
         hardware_adc
+        hardware_pwm
     )
 
     # USBはHID Keyboardに使うので、printfはUARTへ逃がす
@@ -173,6 +174,7 @@ else()
         hardware_gpio
         hardware_i2c
         hardware_adc
+        hardware_pwm
         m
     )
 

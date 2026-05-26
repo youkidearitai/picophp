@@ -120,6 +120,9 @@ final class NativeId {
     public const NATIVE_ADC_INIT = 28;
     public const NATIVE_ADC_READ = 29;
     public const NATIVE_ADC_READ_GPIO = 30;
+    public const NATIVE_PWM_INIT = 31;
+    public const NATIVE_PWM_WRITE = 32;
+    public const NATIVE_PWM_WRITE_PERCENT = 33;
 }
 
 const NATIVE_IDS = [
@@ -154,6 +157,9 @@ const NATIVE_IDS = [
     'adc_init' => NativeId::NATIVE_ADC_INIT,
     'adc_read' => NativeId::NATIVE_ADC_READ,
     'adc_read_gpio' => NativeId::NATIVE_ADC_READ_GPIO,
+    'pwm_init' => NativeId::NATIVE_PWM_INIT,
+    'pwm_write' => NativeId::NATIVE_PWM_WRITE,
+    'pwm_write_percent' => NativeId::NATIVE_PWM_WRITE_PERCENT,
 ];
 
 const DEFAULT_CONSTANTS = [
@@ -189,6 +195,12 @@ const NATIVE_NAMES = [
     25 => 'keyboard_release',
     26 => 'keyboard_type',
     27 => 'keyboard_combo',
+    28 => 'adc_init',
+    29 => 'adc_read',
+    30 => 'adc_read_gpio',
+    31 => 'pwm_init',
+    32 => 'pwm_write',
+    33 => 'pwm_write_percent',
 ];
 
 final class Token {
