@@ -34,6 +34,7 @@
 #include "pico/stdlib.h"
 #include "hardware/gpio.h"
 #include "hardware/i2c.h"
+#include "hardware/adc.h"
 #if __has_include("pico/cyw43_arch.h")
 #include "pico/cyw43_arch.h"
 #endif
@@ -418,6 +419,10 @@ typedef enum {
     NATIVE_KEYBOARD_RELEASE = 25,
     NATIVE_KEYBOARD_TYPE = 26,
     NATIVE_KEYBOARD_COMBO = 27,
+
+    NATIVE_ADC_INIT = 28,
+    NATIVE_ADC_READ = 29,
+    NATIVE_ADC_READ_GPIO = 30,
 } NativeId;
 
 typedef enum {
@@ -512,6 +517,118 @@ static int32_t value_as_int(Value v) {
 
 static bool value_is_number(Value v) {
     return v.type == VAL_INT || v.type == VAL_FLOAT;
+}
+
+static bool adc_gpio_to_channel(int gpio, int *channel) {
+    if (gpio >= 26 && gpio <= 29) {
+        *channel = gpio - 26;
+        return true;
+    }
+
+    return false;
+}
+
+static bool native_adc_init(Vm *vm, int argc, Value *args, Value *ret) {
+#ifdef PICOPHP_ON_PICO
+    if (argc != 1) {
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (!value_is_number(args[0])) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    int gpio = value_as_int(args[0]);
+    int channel = 0;
+
+    if (!adc_gpio_to_channel(gpio, &channel)) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    adc_init();
+    adc_gpio_init((uint)gpio);
+
+    ret->type = VAL_NULL;
+    return true;
+#else
+    (void)vm;
+    (void)argc;
+    (void)args;
+    (void)ret;
+    return false;
+#endif
+}
+
+static bool native_adc_read(Vm *vm, int argc, Value *args, Value *ret) {
+#ifdef PICOPHP_ON_PICO
+    if (argc != 1) {
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (!value_is_number(args[0])) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    int channel = value_as_int(args[0]);
+
+    if (channel < 0 || channel > 4) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    adc_select_input((uint)channel);
+    uint16_t raw = adc_read();
+
+    ret->type = VAL_INT;
+    ret->as.i = (int32_t)raw;
+    return true;
+#else
+    (void)vm;
+    (void)argc;
+    (void)args;
+    (void)ret;
+    return false;
+#endif
+}
+
+static bool native_adc_read_gpio(Vm *vm, int argc, Value *args, Value *ret) {
+#ifdef PICOPHP_ON_PICO
+    if (argc != 1) {
+        vm->status = VM_ERR_BAD_NATIVE;
+        return false;
+    }
+
+    if (!value_is_number(args[0])) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    int gpio = value_as_int(args[0]);
+    int channel = 0;
+
+    if (!adc_gpio_to_channel(gpio, &channel)) {
+        vm->status = VM_ERR_TYPE;
+        return false;
+    }
+
+    adc_select_input((uint)channel);
+    uint16_t raw = adc_read();
+
+    ret->type = VAL_INT;
+    ret->as.i = (int32_t)raw;
+    return true;
+#else
+    (void)vm;
+    (void)argc;
+    (void)args;
+    (void)ret;
+    return false;
+#endif
 }
 
 static bool native_format_dec1(Vm *vm, Value arg, Value *ret) {
@@ -1594,6 +1711,24 @@ static bool call_native(Vm *vm, uint8_t id, uint8_t argc) {
 
         case NATIVE_KEYBOARD_COMBO:
             if (!native_keyboard_combo(vm, argc, args, &ret)) {
+                return false;
+            }
+            break;
+
+        case NATIVE_ADC_INIT:
+            if (!native_adc_init(vm, argc, args, &ret)) {
+                return false;
+            }
+            break;
+
+        case NATIVE_ADC_READ:
+            if (!native_adc_read(vm, argc, args, &ret)) {
+                return false;
+            }
+            break;
+
+        case NATIVE_ADC_READ_GPIO:
+            if (!native_adc_read_gpio(vm, argc, args, &ret)) {
                 return false;
             }
             break;

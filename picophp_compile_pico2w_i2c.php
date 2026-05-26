@@ -117,6 +117,9 @@ final class NativeId {
     public const NATIVE_KEYBOARD_RELEASE = 25;
     public const NATIVE_KEYBOARD_TYPE = 26;
     public const NATIVE_KEYBOARD_COMBO = 27;
+    public const NATIVE_ADC_INIT = 28;
+    public const NATIVE_ADC_READ = 29;
+    public const NATIVE_ADC_READ_GPIO = 30;
 }
 
 const NATIVE_IDS = [
@@ -148,6 +151,9 @@ const NATIVE_IDS = [
     'keyboard_release' => NativeId::NATIVE_KEYBOARD_RELEASE,
     'keyboard_type' => NativeId::NATIVE_KEYBOARD_TYPE,
     'keyboard_combo' => NativeId::NATIVE_KEYBOARD_COMBO,
+    'adc_init' => NativeId::NATIVE_ADC_INIT,
+    'adc_read' => NativeId::NATIVE_ADC_READ,
+    'adc_read_gpio' => NativeId::NATIVE_ADC_READ_GPIO,
 ];
 
 const DEFAULT_CONSTANTS = [

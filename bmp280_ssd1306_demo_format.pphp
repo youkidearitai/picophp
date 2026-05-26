@@ -17,7 +17,13 @@ print("boot\n");
 i2c_init(I2C_BUS, I2C_SDA, I2C_SCL, I2C_BAUD);
 print("after i2c_init\n");
 
+adc_init(26);
+
 print("BMP chip id: ", bmp280_chip_id(I2C_BUS, BMP_ADDR), "\n");
+//$i = 0;
+//$p = 3;
+//
+//$p / $i;
 
 bmp280_init(I2C_BUS, BMP_ADDR);
 aht20_init(I2C_BUS, AHT20_ADDR);
@@ -32,6 +38,12 @@ while (true) {
     $ts = format_dec1($t);
     $ps = format_dec1($p);
     $hs = format_dec1($h);
+
+    $raw = adc_read_gpio(26);
+
+    // VREF=3.3V想定。mVで返す。
+    $mv = ($raw * 3300) / 4095;
+    $ms = format_dec1($mv);
 
     print("T=", $ts, "C\n");
     print("P=", $ps, "hPa\n");
@@ -53,6 +65,11 @@ while (true) {
     ssd1306_write_text(I2C_BUS, OLED_ADDR, "H:");
     ssd1306_write_text(I2C_BUS, OLED_ADDR, $hs);
     ssd1306_write_text(I2C_BUS, OLED_ADDR, "%");
+
+    ssd1306_set_pos(I2C_BUS, OLED_ADDR, 7, 0);
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, "V:");
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, $ms);
+    ssd1306_write_text(I2C_BUS, OLED_ADDR, "mV");
 
     arena_reset();
 
