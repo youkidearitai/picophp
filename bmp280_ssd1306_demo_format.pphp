@@ -56,7 +56,7 @@ while (true) {
     print("H=", $hs, "%\n");
     print("V=", $ms, "mV\n");
 
-    ssd1306_clear_chunked(I2C_BUS, OLED_ADDR);
+    //ssd1306_clear_chunked(I2C_BUS, OLED_ADDR);
 
     ssd1306_set_pos(I2C_BUS, OLED_ADDR, 2, 0);
     ssd1306_write_text(I2C_BUS, OLED_ADDR, "T:");

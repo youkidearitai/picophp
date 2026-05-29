@@ -1949,6 +1949,9 @@ C);
             $result = compile_source_debug($src, $symbolPrefix);
             fwrite(STDOUT, $result['dump']);
         } else {
+            if ($src === DEMO_SOURCE) {
+                throw new PicoCompileError("don't use demo source");
+            }
             fwrite(STDOUT, compile_source($src, $symbolPrefix));
         }
         return 0;
