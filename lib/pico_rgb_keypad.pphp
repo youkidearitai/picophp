@@ -1,0 +1,30 @@
+<?php
+// lib/pico_rgb_keypad.pphp
+
+const PICO_RGB_KEYPAD_ADDR = 32; // 0x20
+
+function rgb_keypad_init($bus, $addr) {
+    // TCA9555 config register:
+    // 1=input, 0=output.
+    // register 0x06 = config port 0
+    // register 0x07 = config port 1
+    i2c_write($bus, $addr, "\x06\xff\xff");
+    sleep_ms(5);
+}
+
+function rgb_keypad_raw($bus, $addr) {
+    $d = i2c_write_read($bus, $addr, "\x00", 2);
+    return $d[0] | ($d[1] << 8);
+}
+
+function rgb_keypad_read($bus, $addr) {
+    $raw = rgb_keypad_raw($bus, $addr);
+
+    // ボタンはactive-low想定:
+    // 離している=1, 押している=0
+    return (65535 - $raw) & 65535;
+}
+
+function rgb_keypad_pressed($mask, $key) {
+    return (($mask >> $key) & 1) != 0;
+}

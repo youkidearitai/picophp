@@ -108,15 +108,18 @@ function require_file(string $path): void {
     }
 }
 
-function write_pico_cmake(string $outDir, bool $usbKeyboard = false, bool $debug = false): void {
+function write_pico_cmake(string $outDir, bool $usbKeyboard = false, bool $debug = true, string $board = 'pico'): void {
     $picophpUsbKeyboard = $usbKeyboard ? "1" : "0";
     $debugFlag = $debug ? "1" : "0";
+
     $cmake = <<<'CMAKE'
 cmake_minimum_required(VERSION 3.13)
 
 include(pico_sdk_import.cmake)
 
 project(picophp_app C CXX ASM)
+
+set(PICOPHP_BOARD "@PICOPHP_BOARD@")
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 17)
@@ -130,14 +133,43 @@ add_executable(picophp_app
 set(PICOPHP_USB_KEYBOARD @PICOPHP_USB_KEYBOARD@)
 set(PICOPHP_PROGRAM_HAS_DEBUG_LINES @PICOPHP_PROGRAM_HAS_DEBUG_LINES@)
 
+set(PICOPHP_LIBS
+    pico_stdlib
+    hardware_gpio
+    hardware_i2c
+    hardware_adc
+    hardware_pwm
+)
+
+if(PICOPHP_BOARD STREQUAL "pico_w")
+    list(APPEND PICOPHP_LIBS pico_cyw43_arch_none)
+endif()
+
+if(PICOPHP_BOARD STREQUAL "pico2_w")
+    list(APPEND PICOPHP_LIBS pico_cyw43_arch_none)
+endif()
+
+if(PICOPHP_BOARD STREQUAL "pico")
+    target_compile_definitions(picophp_app PRIVATE
+        PICOPHP_LED_GPIO=25
+    )
+else()
+    target_compile_definitions(picophp_app PRIVATE
+        PICOPHP_LED_CYW43=1
+    )
+endif()
+
 if(PICOPHP_USB_KEYBOARD)
     target_sources(picophp_app PRIVATE
         usb_descriptors.c
     )
 
+    list(APPEND PICOPHP_LIBS tinyusb_device tinyusb_board)
+
     target_compile_definitions(picophp_app PRIVATE
         PICOPHP_ON_PICO=1
         PICOPHP_USB_KEYBOARD=1
+        PICOPHP_USE_PROGRAM_HEADER=1
     )
 
     target_include_directories(picophp_app PRIVATE
@@ -145,17 +177,9 @@ if(PICOPHP_USB_KEYBOARD)
     )
 
     target_link_libraries(picophp_app
-        pico_stdlib
-        pico_cyw43_arch_none
-        tinyusb_device
-        tinyusb_board
-        hardware_gpio
-        hardware_i2c
-        hardware_adc
-        hardware_pwm
+        ${PICOPHP_LIBS}
     )
 
-    # USBはHID Keyboardに使うので、printfはUARTへ逃がす
     pico_enable_stdio_usb(picophp_app 0)
     pico_enable_stdio_uart(picophp_app 1)
 else()
@@ -168,14 +192,9 @@ else()
         ${CMAKE_CURRENT_LIST_DIR}
     )
 
+    list(APPEND PICOPHP_LIBS m)
     target_link_libraries(picophp_app
-        pico_stdlib
-        pico_cyw43_arch_none
-        hardware_gpio
-        hardware_i2c
-        hardware_adc
-        hardware_pwm
-        m
+        ${PICOPHP_LIBS}
     )
 
     pico_enable_stdio_usb(picophp_app 1)
@@ -187,6 +206,7 @@ CMAKE;
 
     $cmake = str_replace('@PICOPHP_USB_KEYBOARD@', $picophpUsbKeyboard, $cmake);
     $cmake = str_replace('@PICOPHP_PROGRAM_HAS_DEBUG_LINES@', $debugFlag, $cmake);
+    $cmake = str_replace('@PICOPHP_BOARD@', $board, $cmake);
     file_put_contents($outDir . DIRECTORY_SEPARATOR . 'CMakeLists.txt', $cmake);
 
     $import = <<<'IMPORT'
@@ -218,7 +238,7 @@ Build example:
 export PICO_SDK_PATH=$HOME/pico/pico-sdk
 mkdir -p build
 cd build
-cmake -DPICO_BOARD=pico2_w -DPICO_PLATFORM=rp2350 ..
+cmake -DPICO_BOARD=@PICOPHP_BOARD@ -DPICO_PLATFORM=rp2350 ..
 make -j4
 ```
 
@@ -228,7 +248,11 @@ The output UF2 will be under:
 build/picophp_app.uf2
 ```
 README;
+    if ($board !== 'pico2_w') {
+        str_replace("rp2350", "rp2040", $readme);
+    }
 
+    $readme = str_replace('@PICOPHP_BOARD@', $board, $readme);
     file_put_contents($outDir . DIRECTORY_SEPARATOR . 'README.md', $readme);
 }
 
@@ -255,6 +279,8 @@ function main(array $argv): int {
             $run = true;
         } elseif ($arg === '--pico') {
             $pico = true;
+        } elseif (str_starts_with($arg, '--board')) {
+            $board = substr($arg, strlen('--board='));
         } elseif ($arg === '--out') {
             $i++;
             if ($i >= count($argv)) {
@@ -472,14 +498,16 @@ C);
 
     copy($vm, $outDir . DIRECTORY_SEPARATOR . 'picophp_vm_pico2w_i2c_bitwise_ctrl.c');
 
+    $platform = $board === 'pico2_w' ? 'rp2350' : 'rp2040';
+
     if ($pico) {
-        write_pico_cmake($outDir, $usbInput);
+        write_pico_cmake($outDir, $usbInput, board: $board);
         fwrite(STDERR, "\nGenerated Pico SDK project in: {$outDir}\n");
         fwrite(STDERR, "Next:\n");
         fwrite(STDERR, "  cd " . sh_quote($outDir) . "\n");
         fwrite(STDERR, "  export PICO_SDK_PATH=\$HOME/pico/pico-sdk\n");
         fwrite(STDERR, "  mkdir -p build && cd build\n");
-        fwrite(STDERR, "  cmake -DPICO_BOARD=pico2_w -DPICO_PLATFORM=rp2350 .. && make -j4\n");
+        fwrite(STDERR, "  cmake -DPICO_BOARD={$board} -DPICO_PLATFORM={$platform} .. && make -j4\n");
         return 0;
     }
 

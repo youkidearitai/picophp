@@ -42,6 +42,7 @@
 #endif
 
 #ifdef PICOPHP_USB_KEYBOARD
+#include "bsp/board_api.h"
 #include "tusb.h"
 #include "class/hid/hid.h"
 #endif
@@ -51,6 +52,40 @@ static void picophp_usb_task(void) {
     tud_task();
 #endif
 }
+
+#ifdef PICOPHP_USB_KEYBOARD
+static bool picophp_keyboard_usb_inited = false;
+
+static void picophp_keyboard_usb_init_once(void) {
+    if (picophp_keyboard_usb_inited) {
+        return;
+    }
+
+    board_init();
+    tusb_init();
+
+    picophp_keyboard_usb_inited = true;
+}
+#endif
+
+
+#ifdef PICOPHP_USB_KEYBOARD
+static bool keyboard_wait_ready_timeout(uint32_t timeout_ms) {
+    picophp_keyboard_usb_init_once();
+
+    for (uint32_t i = 0; i < timeout_ms; i++) {
+        tud_task();
+
+        if (tud_mounted() && tud_hid_ready()) {
+            return true;
+        }
+
+        sleep_ms(1);
+    }
+
+    return false;
+}
+#endif
 
 #ifdef PICOPHP_USB_KEYBOARD
 
@@ -66,26 +101,37 @@ static void keyboard_wait_ready(void) {
     }
 }
 
-static void keyboard_send(uint8_t modifier, uint8_t keycode) {
-    keyboard_wait_ready();
+#ifdef PICOPHP_USB_KEYBOARD
+static bool keyboard_send(uint8_t modifier, uint8_t keycode) {
+    if (!keyboard_wait_ready_timeout(5000)) {
+        return false;
+    }
 
-    uint8_t keys[6] = {0};
+    uint8_t keys[6] = {0, 0, 0, 0, 0, 0};
     keys[0] = keycode;
 
-    tud_hid_keyboard_report(0, modifier, keys);
+    if (!tud_hid_keyboard_report(0, modifier, keys)) {
+        return false;
+    }
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 30; i++) {
         tud_task();
         sleep_ms(1);
     }
 
-    tud_hid_keyboard_report(0, 0, NULL);
+    uint8_t empty[6] = {0, 0, 0, 0, 0, 0};
+    if (!tud_hid_keyboard_report(0, 0, empty)) {
+        return false;
+    }
 
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 30; i++) {
         tud_task();
         sleep_ms(1);
     }
+
+    return true;
 }
+#endif
 
 static bool ascii_to_hid(uint8_t ch, uint8_t *modifier, uint8_t *keycode) {
     *modifier = 0;
@@ -848,7 +894,20 @@ static bool native_keyboard_init(Vm *vm, int argc, Value *args, Value *ret) {
     }
 
 #ifdef PICOPHP_USB_KEYBOARD
-    keyboard_wait_ready();
+    picophp_keyboard_usb_init_once();
+
+    // Hostにenumerateされるまで少し回す。
+    // ここで永久待ちするとデバッグしづらいので、まずは最大3秒程度にする。
+    for (int i = 0; i < 3000; i++) {
+        tud_task();
+
+        if (tud_mounted()) {
+            break;
+        }
+
+        sleep_ms(1);
+    }
+
     ret->type = VAL_NULL;
     return true;
 #else
@@ -876,7 +935,20 @@ static bool native_keyboard_key(Vm *vm, int argc, Value *args, Value *ret) {
         return false;
     }
 
-    keyboard_send(0, (uint8_t)keycode);
+    printf("[keyboard_key] mounted=%d ready=%d key=%d\n",
+        tud_mounted() ? 1 : 0,
+        tud_hid_ready() ? 1 : 0,
+        keycode
+    );
+    fflush(stdout);
+    bool ok = keyboard_send(0, (uint8_t)keycode);
+
+    printf("[keyboard_key] send=%d mounted=%d ready=%d\n",
+        ok ? 1 : 0,
+        tud_mounted() ? 1 : 0,
+        tud_hid_ready() ? 1 : 0
+    );
+    fflush(stdout);
 
     ret->type = VAL_NULL;
     return true;
@@ -1340,6 +1412,19 @@ static bool native_arena_reset(Vm *vm, Value *ret) {
     return true;
 }
 
+static void picophp_sleep_ms(int32_t ms) {
+#ifdef PICOPHP_USB_KEYBOARD
+    picophp_keyboard_usb_init_once();
+
+    for (int32_t i = 0; i < ms; i++) {
+        tud_task();
+        sleep_ms(1);
+    }
+#else
+    sleep_ms(ms);
+#endif
+}
+
 static void native_sleep_ms(int32_t ms) {
 #ifdef PICOPHP_USB_KEYBOARD
     for (int32_t i = 0; i < ms; i++) {
@@ -1347,7 +1432,7 @@ static void native_sleep_ms(int32_t ms) {
         sleep_ms(1);
     }
 #elif PICOPHP_ON_PICO
-    sleep_ms((uint32_t)ms);
+    picophp_sleep_ms((uint32_t)ms);
 #else
     printf("[sleep_ms %ld]\n", (long)ms);
 #endif
@@ -2294,6 +2379,16 @@ int main(void) {
     printf("[PicoPHP] boot blink before vm_init\n");
     fflush(stdout);
     picophp_boot_blink(5, 120, 120);
+#endif
+
+#ifdef PICOPHP_USB_KEYBOARD
+    picophp_keyboard_usb_init_once();
+
+    // enumaration待ち。LEDがあればここで点滅させてもよい。
+    for (int i = 0; i < 3000; i++) {
+        tud_task();
+        sleep_ms(1);
+    }
 #endif
 
     Vm vm;
